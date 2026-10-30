@@ -46,22 +46,28 @@ export function ProjectEditor({ projectId }: { projectId: string }) {
         </h1>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {project.repos.map((r, i) => (
-          <button
-            key={`${r.owner}/${r.repo}`}
-            type="button"
-            onClick={() => setActiveIdx(i)}
-            className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${
-              i === activeIdx
-                ? "bg-teal-600 text-white"
-                : "border border-zinc-300 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200"
-            }`}
-          >
-            {r.owner}/{r.repo}
-          </button>
-        ))}
-      </div>
+      {project.repos.length > 1 ? (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {project.repos.map((r, i) => (
+            <button
+              key={`${r.owner}/${r.repo}`}
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium ${
+                i === activeIdx
+                  ? "bg-teal-600 text-white"
+                  : "border border-zinc-300 text-zinc-700 dark:border-zinc-600 dark:text-zinc-200"
+              }`}
+            >
+              {r.owner}/{r.repo}
+            </button>
+          ))}
+        </div>
+      ) : active ? (
+        <p className="text-sm text-zinc-500">
+          {active.owner}/{active.repo}
+        </p>
+      ) : null}
 
       {active ? (
         <RepoEditorPanel

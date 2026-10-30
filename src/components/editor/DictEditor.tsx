@@ -29,8 +29,8 @@ export function DictEditor({
   }
 
   function addRow() {
-    // New row may only fill text; empty code/weight → pure-text on write-back
-    onChange([...entries, { text: "" }]);
+    // Prepend: new rows appear before the first entry; empty code/weight → pure-text on write-back
+    onChange([{ text: "" }, ...entries]);
   }
 
   return (

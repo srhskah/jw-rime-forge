@@ -8,7 +8,7 @@ export default function WorkspacePage() {
           个人工作区
         </h1>
         <p className="mt-1 text-sm text-zinc-500">
-          登录后筛选你的 Rime 方案仓库，组合为项目并编辑提交。
+          登录后筛选你的 Rime 方案仓库：每项目绑定 1 个仓库，可同时管理多个项目。
         </p>
       </div>
       <WorkspaceApp />

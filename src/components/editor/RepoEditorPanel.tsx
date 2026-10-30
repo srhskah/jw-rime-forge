@@ -54,6 +54,7 @@ export function RepoEditorPanel({
   const [initOpen, setInitOpen] = useState(false);
   const [schemaId, setSchemaId] = useState("my_schema");
   const [schemaName, setSchemaName] = useState("我的方案");
+  const [activeTab, setActiveTab] = useState<"dict" | "schema">("dict");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,6 +140,12 @@ export function RepoEditorPanel({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    // Prefer dict tab; fall back to schema when dict is absent
+    if (dict) setActiveTab("dict");
+    else if (schemaPath) setActiveTab("schema");
+  }, [dict, schemaPath]);
 
   const dictCurrentRaw = useMemo(() => {
     if (!dict) return "";
@@ -328,35 +335,82 @@ export function RepoEditorPanel({
         <p className="text-sm text-teal-700 dark:text-teal-300">{saveMsg}</p>
       ) : null}
 
-      {schemaPath ? (
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            schema.yaml · {schemaPath}
-          </h3>
-          <SchemaEditor
-            raw={schemaCurrent}
-            disabled={readOnly}
-            onChange={(next, hints) => {
-              setSchemaCurrent(next);
-              setSchemaHints(hints);
-            }}
-          />
-        </section>
-      ) : null}
+      {schemaPath || dict ? (
+        <div className="flex flex-col gap-3">
+          <div
+            role="tablist"
+            aria-label="方案文件"
+            className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800"
+          >
+            {dict ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "dict"}
+                onClick={() => setActiveTab("dict")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+                  activeTab === "dict"
+                    ? "border-teal-600 text-teal-700 dark:text-teal-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                }`}
+              >
+                dict.yaml
+                {dictChanged ? (
+                  <span className="ml-1 text-amber-600" aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+            {schemaPath ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "schema"}
+                onClick={() => setActiveTab("schema")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${
+                  activeTab === "schema"
+                    ? "border-teal-600 text-teal-700 dark:text-teal-400"
+                    : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                }`}
+              >
+                schema.yaml
+                {schemaChanged ? (
+                  <span className="ml-1 text-amber-600" aria-hidden>
+                    ·
+                  </span>
+                ) : null}
+              </button>
+            ) : null}
+          </div>
 
-      {dict ? (
-        <section className="flex flex-col gap-3">
-          <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-            dict.yaml · {dict.path}
-          </h3>
-          <DictEditor
-            entries={dictEntries}
-            columns={dict.columns}
-            disabled={readOnly}
-            largeWarning={dict.largeWarning}
-            onChange={setDictEntries}
-          />
-        </section>
+          {activeTab === "dict" && dict ? (
+            <section className="flex flex-col gap-3" role="tabpanel">
+              <p className="text-xs text-zinc-500">{dict.path}</p>
+              <DictEditor
+                entries={dictEntries}
+                columns={dict.columns}
+                disabled={readOnly}
+                largeWarning={dict.largeWarning}
+                onChange={setDictEntries}
+              />
+            </section>
+          ) : null}
+
+          {activeTab === "schema" && schemaPath ? (
+            <section className="flex flex-col gap-3" role="tabpanel">
+              <p className="text-xs text-zinc-500">{schemaPath}</p>
+              <SchemaEditor
+                raw={schemaCurrent}
+                disabled={readOnly}
+                onChange={(next, hints) => {
+                  setSchemaCurrent(next);
+                  setSchemaHints(hints);
+                }}
+              />
+            </section>
+          ) : null}
+        </div>
       ) : null}
 
       {/* Mobile fixed save bar above safe area */}

@@ -57,7 +57,7 @@ Scope：`read:user` + `repo`（MVP；未来可迁移 GitHub App 做仓库级细�
 ### 第二阶段（登录与编辑）
 
 1. GitHub 登录后进入「工作区」，拉到个人疑似 Rime 仓库  
-2. 勾选 ≥2 个仓库创建项目（刷新后 localStorage 仍在）  
+2. 选中 1 个仓库创建项目；可重复创建多个项目（刷新后 localStorage 仍在）  
 3. schema：number / text / boolean 控件可改；未知字段只在预览提示  
 4. dict：增删改词条；仅 text 的新行写回为纯 text 列  
 5. 保存走 Git Data API 单次 commit；非协作者返回 403，前端隐藏保存

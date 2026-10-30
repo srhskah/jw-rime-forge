@@ -58,27 +58,26 @@ export function WorkspaceApp() {
     };
   }, []);
 
-  function toggle(fullName: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(fullName)) next.delete(fullName);
-      else next.add(fullName);
-      return next;
-    });
+  function selectRepo(fullName: string) {
+    setSelected(new Set([fullName]));
   }
 
   function createProject() {
-    if (selected.size < 2) return;
-    const name = projectName.trim() || `项目 ${projects.length + 1}`;
-    const chosen = repos.filter((r) => selected.has(r.full_name));
+    if (selected.size !== 1) return;
+    const fullName = [...selected][0];
+    const chosen = repos.find((r) => r.full_name === fullName);
+    if (!chosen) return;
+    const name = projectName.trim() || chosen.full_name;
     const project: Project = {
       id: createProjectId(),
       name,
-      repos: chosen.map((r) => ({
-        owner: r.owner,
-        repo: r.name,
-        branch: r.default_branch || "main",
-      })),
+      repos: [
+        {
+          owner: chosen.owner,
+          repo: chosen.name,
+          branch: chosen.default_branch || "main",
+        },
+      ],
     };
     const all = upsertProject(project);
     setProjects(all);
@@ -118,12 +117,12 @@ export function WorkspaceApp() {
           我的项目
         </h2>
         <p className="text-xs text-zinc-500">
-          项目仅保存在浏览器 localStorage，不建数据库。每个项目需包含 ≥2 个仓库。
+          项目仅保存在浏览器 localStorage。每个项目对应 1 个仓库；可同时创建多个项目。
         </p>
         {projects.length === 0 ? (
           <EmptyState
             title="还没有项目"
-            description="在下方勾选至少 2 个疑似 Rime 方案仓库，组合为一个项目。"
+            description="在下方选中一个疑似 Rime 方案仓库，即可创建一个项目。"
           />
         ) : (
           <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -187,9 +186,10 @@ export function WorkspaceApp() {
                   }`}
                 >
                   <input
-                    type="checkbox"
+                    type="radio"
+                    name="workspace-repo"
                     checked={checked}
-                    onChange={() => toggle(r.full_name)}
+                    onChange={() => selectRepo(r.full_name)}
                     className="mt-1"
                   />
                   <span className="min-w-0">
@@ -210,18 +210,18 @@ export function WorkspaceApp() {
             <input
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
-              placeholder="例如：我的双拼方案集"
+              placeholder="留空则用仓库全名"
               className="rounded-md border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
             />
           </label>
           <button
             type="button"
-            disabled={selected.size < 2}
+            disabled={selected.size !== 1}
             onClick={createProject}
             className="inline-flex items-center justify-center gap-1.5 rounded-md bg-teal-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40"
           >
             <FolderPlus className="h-4 w-4" />
-            创建项目（已选 {selected.size}）
+            创建项目
           </button>
         </div>
       </section>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { getFileContent } from "@/lib/github/files";
 import { GitHubApiError } from "@/lib/github/client";
+import { resolveGitHubToken } from "@/lib/github/token";
 import { parseDict } from "@/lib/rime/parse-dict";
 
 export const runtime = "nodejs";
@@ -27,7 +28,7 @@ export async function GET(
       repo,
       path,
       ref,
-      token: session.accessToken ?? null,
+      token: resolveGitHubToken(session.accessToken),
     });
 
     if (parse === "dict") {

@@ -52,7 +52,8 @@ export function ErrorState({
       <p className="text-sm text-red-700/90 dark:text-red-300/90">{message}</p>
       {rateLimited ? (
         <p className="text-xs text-red-600/80 dark:text-red-400/80">
-          GitHub API 限流：未登录约 60 次/小时；登录后约 5000 次/小时。请稍后重试或登录。
+          GitHub API 限流：匿名 IP 约 60 次/小时。请稍后重试、登录，或在服务端配置
+          GITHUB_TOKEN（PAT）将匿名浏览/搜索提升到约 5000 次/小时。
         </p>
       ) : null}
     </div>

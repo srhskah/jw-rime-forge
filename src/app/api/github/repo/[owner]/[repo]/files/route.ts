@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { discoverRimeFiles } from "@/lib/github/files";
 import { GitHubApiError } from "@/lib/github/client";
+import { resolveGitHubToken } from "@/lib/github/token";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,7 @@ export async function GET(
       owner,
       repo,
       branch,
-      token: session.accessToken ?? null,
+      token: resolveGitHubToken(session.accessToken),
     });
     return NextResponse.json(result);
   } catch (e) {

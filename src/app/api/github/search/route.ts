@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth/session";
 import { searchRimeRepos } from "@/lib/github/search";
 import { GitHubApiError } from "@/lib/github/client";
+import { resolveGitHubToken } from "@/lib/github/token";
 
 export const runtime = "nodejs";
 
@@ -17,7 +18,9 @@ export async function GET(request: Request) {
       q,
       sort,
       page,
-      token: session.accessToken ?? null,
+      perPage: 20,
+      // 未登录时回落到服务端 GITHUB_TOKEN，避免匿名 IP 60 次/小时限额
+      token: resolveGitHubToken(session.accessToken),
     });
     return NextResponse.json(result);
   } catch (e) {

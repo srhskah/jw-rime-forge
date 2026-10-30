@@ -57,7 +57,7 @@ export function RepoSearch() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="关键词（可选），默认搜索 topic/名称含 rime"
+              placeholder="关键词（名称 / About / README 字面匹配，支持中文）"
               className="w-full rounded-md border border-zinc-300 bg-white py-2.5 pr-3 pl-9 text-sm outline-none ring-teal-600/30 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
             />
           </div>

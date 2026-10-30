@@ -36,7 +36,8 @@ function resolvePassword(): string {
 }
 
 export async function getSession() {
-  return getIronSession<SessionData>(cookies(), {
+  // Next.js 15+: cookies() returns a Promise
+  return getIronSession<SessionData>(await cookies(), {
     ...sessionOptions,
     password: resolvePassword(),
   });

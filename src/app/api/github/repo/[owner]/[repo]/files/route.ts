@@ -7,16 +7,17 @@ export const runtime = "nodejs";
 
 export async function GET(
   request: Request,
-  { params }: { params: { owner: string; repo: string } }
+  { params }: { params: Promise<{ owner: string; repo: string }> }
 ) {
+  const { owner, repo } = await params;
   const url = new URL(request.url);
   const branch = url.searchParams.get("branch") ?? undefined;
 
   try {
     const session = await getSession();
     const result = await discoverRimeFiles({
-      owner: params.owner,
-      repo: params.repo,
+      owner,
+      repo,
       branch,
       token: session.accessToken ?? null,
     });

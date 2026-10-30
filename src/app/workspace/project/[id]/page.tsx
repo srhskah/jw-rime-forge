@@ -1,9 +1,10 @@
 import { ProjectEditor } from "@/components/workspace/ProjectEditor";
 
-export default function ProjectPage({
+export default async function ProjectPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  return <ProjectEditor projectId={params.id} />;
+  const { id } = await params;
+  return <ProjectEditor projectId={id} />;
 }

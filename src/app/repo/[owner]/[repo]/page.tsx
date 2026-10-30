@@ -1,14 +1,15 @@
 import { SchemaBrowser } from "@/components/repo/SchemaBrowser";
 
-export default function RepoPage({
+export default async function RepoPage({
   params,
 }: {
-  params: { owner: string; repo: string };
+  params: Promise<{ owner: string; repo: string }>;
 }) {
+  const { owner, repo } = await params;
   return (
     <SchemaBrowser
-      owner={decodeURIComponent(params.owner)}
-      repo={decodeURIComponent(params.repo)}
+      owner={decodeURIComponent(owner)}
+      repo={decodeURIComponent(repo)}
     />
   );
 }

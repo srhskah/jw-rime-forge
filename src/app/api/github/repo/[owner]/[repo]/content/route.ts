@@ -8,8 +8,9 @@ export const runtime = "nodejs";
 
 export async function GET(
   request: Request,
-  { params }: { params: { owner: string; repo: string } }
+  { params }: { params: Promise<{ owner: string; repo: string }> }
 ) {
+  const { owner, repo } = await params;
   const url = new URL(request.url);
   const path = url.searchParams.get("path");
   const ref = url.searchParams.get("ref") ?? undefined;
@@ -22,8 +23,8 @@ export async function GET(
   try {
     const session = await getSession();
     const file = await getFileContent({
-      owner: params.owner,
-      repo: params.repo,
+      owner,
+      repo,
       path,
       ref,
       token: session.accessToken ?? null,

@@ -64,7 +64,7 @@ export function WorkspaceApp() {
 
   function createProject() {
     if (selected.size !== 1) return;
-    const fullName = [...selected][0];
+    const fullName = Array.from(selected)[0];
     const chosen = repos.find((r) => r.full_name === fullName);
     if (!chosen) return;
     const name = projectName.trim() || chosen.full_name;

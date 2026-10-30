@@ -1,49 +1,67 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Search, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 import Link from "next/link";
 import type { GitHubRepoCard } from "@/types";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui/States";
 
+const PER_PAGE = 20;
+
 export function RepoSearch() {
   const [q, setQ] = useState("");
+  const [committedQ, setCommittedQ] = useState("");
   const [sort, setSort] = useState<"stars" | "updated">("stars");
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const [repos, setRepos] = useState<GitHubRepoCard[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; rateLimited?: boolean } | null>(null);
 
-  const load = useCallback(async (query: string, sortBy: "stars" | "updated") => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ sort: sortBy });
-      if (query.trim()) params.set("q", query.trim());
-      const res = await fetch(`/api/github/search?${params}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setError({ message: data.error || "搜索失败", rateLimited: data.rateLimited });
-        setRepos([]);
-        return;
+  const load = useCallback(
+    async (query: string, sortBy: "stars" | "updated", pageNum: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({
+          sort: sortBy,
+          page: String(pageNum),
+          per_page: String(PER_PAGE),
+        });
+        if (query.trim()) params.set("q", query.trim());
+        const res = await fetch(`/api/github/search?${params}`);
+        const data = await res.json();
+        if (!res.ok) {
+          setError({ message: data.error || "搜索失败", rateLimited: data.rateLimited });
+          setRepos([]);
+          return;
+        }
+        setRepos(data.repos || []);
+        setTotal(data.total || 0);
+        setPageCount(Math.max(1, data.pageCount || 1));
+        setPage(data.page || pageNum);
+      } catch (e) {
+        setError({ message: e instanceof Error ? e.message : "网络错误" });
+      } finally {
+        setLoading(false);
       }
-      setRepos(data.repos || []);
-      setTotal(data.total || 0);
-    } catch (e) {
-      setError({ message: e instanceof Error ? e.message : "网络错误" });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   useEffect(() => {
-    load("", "stars");
-  }, [load]);
+    load(committedQ, sort, page);
+  }, [load, committedQ, sort, page]);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    load(q, sort);
+    setPage(1);
+    setCommittedQ(q.trim());
   }
+
+  const from = total === 0 ? 0 : (page - 1) * PER_PAGE + 1;
+  const to = Math.min(page * PER_PAGE, Math.min(total, 1000));
 
   return (
     <div className="flex flex-col gap-5">
@@ -66,7 +84,10 @@ export function RepoSearch() {
           <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">排序</span>
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value as "stars" | "updated")}
+            onChange={(e) => {
+              setSort(e.target.value as "stars" | "updated");
+              setPage(1);
+            }}
             className="rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
           >
             <option value="stars">按 Star</option>
@@ -84,6 +105,10 @@ export function RepoSearch() {
       {!loading && !error ? (
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           约 {total.toLocaleString()} 个相关仓库
+          {total > 0
+            ? ` · 当前第 ${page}/${pageCount} 页（显示 ${from}–${to}）`
+            : ""}
+          {total > 1000 ? " · GitHub 搜索最多可翻到前 1000 条" : ""}
         </p>
       ) : null}
 
@@ -127,6 +152,32 @@ export function RepoSearch() {
           </li>
         ))}
       </ul>
+
+      {!loading && !error && pageCount > 1 ? (
+        <div className="flex flex-wrap items-center justify-center gap-2 pt-1 pb-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-zinc-600"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            上一页
+          </button>
+          <span className="px-2 text-sm text-zinc-600 dark:text-zinc-300">
+            {page} / {pageCount}
+          </span>
+          <button
+            type="button"
+            disabled={page >= pageCount}
+            onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+            className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-3 py-2 text-sm disabled:opacity-40 dark:border-zinc-600"
+          >
+            下一页
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

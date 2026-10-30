@@ -60,20 +60,29 @@ async function runSearch(
  * - 有关键词：单次请求，在 name / About / README 字面匹配（支持中文）
  * - 短缓存，降低匿名 60/hr 限额压力
  */
+export type SearchResult = {
+  total: number;
+  page: number;
+  perPage: number;
+  /** GitHub Search 最多返回前 1000 条，超出无法翻到 */
+  pageCount: number;
+  repos: GitHubRepoCard[];
+};
+
 export async function searchRimeRepos(opts: {
   q?: string;
   sort?: "stars" | "updated" | "best-match";
   page?: number;
   perPage?: number;
   token?: string | null;
-}): Promise<{ total: number; repos: GitHubRepoCard[] }> {
+}): Promise<SearchResult> {
   const phrase = (opts.q ?? "").trim().replace(/"/g, "");
   const perPage = Math.min(opts.perPage ?? 20, 50);
   const sort = opts.sort ?? "stars";
-  const page = opts.page ?? 1;
+  const page = Math.max(1, opts.page ?? 1);
 
   const cacheKey = `search:${phrase}|${sort}|${page}|${perPage}`;
-  const cached = cacheGet<{ total: number; repos: GitHubRepoCard[] }>(cacheKey);
+  const cached = cacheGet<SearchResult>(cacheKey);
   if (cached) return cached;
 
   // 单次请求：有关键词时字面匹配 name/About/README，并限定 topic:rime
@@ -82,12 +91,22 @@ export async function searchRimeRepos(opts: {
     ? `"${phrase}" in:name,description,readme topic:rime`
     : "topic:rime";
 
-  const result = await runSearch(query, {
+  const raw = await runSearch(query, {
     ...opts,
     sort,
     page,
     perPage,
   });
+
+  // GitHub Search API 最多返回前 1000 条结果
+  const reachable = Math.min(raw.total, 1000);
+  const pageCount = Math.max(1, Math.ceil(reachable / perPage));
+  const result: SearchResult = {
+    ...raw,
+    page,
+    perPage,
+    pageCount,
+  };
 
   // 默认列表缓存更久；关键词短缓存
   cacheSet(cacheKey, result, phrase ? 45_000 : 120_000);

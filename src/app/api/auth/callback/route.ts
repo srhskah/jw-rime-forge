@@ -6,6 +6,13 @@ export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+
+  const appUrl = process.env.APP_URL || process.env.URL;
+  if (!appUrl) {
+    return NextResponse.json({ error: "APP_URL 未配置" }, { status: 500 });
+  }
+  const appOrigin = new URL(appUrl).origin;
+
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const cookieHeader = request.headers.get("cookie") || "";
@@ -13,13 +20,13 @@ export async function GET(request: Request) {
   const storedState = stateMatch ? decodeURIComponent(stateMatch[1]) : null;
 
   if (!code || !state || !storedState || state !== storedState) {
-    return NextResponse.redirect(new URL("/?auth=invalid_state", url.origin));
+    return NextResponse.redirect(new URL("/?auth=invalid_state", appOrigin));
   }
 
   const clientId = process.env.GITHUB_CLIENT_ID;
   const clientSecret = process.env.GITHUB_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL("/?auth=misconfigured", url.origin));
+    return NextResponse.redirect(new URL("/?auth=misconfigured", appOrigin));
   }
 
   const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
@@ -32,6 +39,7 @@ export async function GET(request: Request) {
       client_id: clientId,
       client_secret: clientSecret,
       code,
+      redirect_uri: `${appOrigin}/api/auth/callback`,
     }),
   });
 
@@ -44,8 +52,10 @@ export async function GET(request: Request) {
   if (!tokenData.access_token) {
     return NextResponse.redirect(
       new URL(
-        `/?auth=token_error&msg=${encodeURIComponent(tokenData.error_description || tokenData.error || "unknown")}`,
-        url.origin
+        `/?auth=token_error&msg=${encodeURIComponent(
+          tokenData.error_description || tokenData.error || "unknown"
+        )}`,
+        appOrigin
       )
     );
   }
@@ -64,7 +74,7 @@ export async function GET(request: Request) {
   session.isLoggedIn = true;
   await session.save();
 
-  const res = NextResponse.redirect(new URL("/workspace", url.origin));
+  const res = NextResponse.redirect(new URL("/workspace", appOrigin));
   res.cookies.set("oauth_state", "", { path: "/", maxAge: 0 });
   return res;
 }

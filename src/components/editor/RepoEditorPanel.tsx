@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DictEntry, DiscoveredRimeFile } from "@/types";
 import { SchemaEditor } from "./SchemaEditor";
 import { DictEditor } from "./DictEditor";
@@ -12,7 +12,9 @@ import {
   LoadingState,
   ReadOnlyBanner,
 } from "@/components/ui/States";
-import { Save } from "lucide-react";
+import { DownloadButtons } from "@/components/repo/DownloadButtons";
+import { useUndoRedo } from "@/hooks/useUndoRedo";
+import { Redo2, Save, Undo2 } from "lucide-react";
 
 type DictState = {
   path: string;
@@ -39,12 +41,28 @@ export function RepoEditorPanel({
   const [schemaPath, setSchemaPath] = useState<string | null>(null);
 
   const [schemaOriginal, setSchemaOriginal] = useState("");
-  const [schemaCurrent, setSchemaCurrent] = useState("");
+  const {
+    present: schemaCurrent,
+    set: setSchemaCurrent,
+    reset: resetSchema,
+    undo: undoSchema,
+    redo: redoSchema,
+    canUndo: canUndoSchema,
+    canRedo: canRedoSchema,
+  } = useUndoRedo("");
   const [schemaSha, setSchemaSha] = useState<string | undefined>();
   const [schemaHints, setSchemaHints] = useState<string[]>([]);
 
   const [dict, setDict] = useState<DictState | null>(null);
-  const [dictEntries, setDictEntries] = useState<DictEntry[]>([]);
+  const {
+    present: dictEntries,
+    set: setDictEntries,
+    reset: resetDictEntries,
+    undo: undoDict,
+    redo: redoDict,
+    canUndo: canUndoDict,
+    canRedo: canRedoDict,
+  } = useUndoRedo<DictEntry[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ message: string; rateLimited?: boolean } | null>(null);
@@ -108,8 +126,14 @@ export function RepoEditorPanel({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "读取 schema 失败");
         setSchemaOriginal(data.raw);
-        setSchemaCurrent(data.raw);
+        resetSchema(data.raw);
+        setSchemaHints([]);
         setSchemaSha(data.sha);
+      } else {
+        setSchemaOriginal("");
+        resetSchema("");
+        setSchemaHints([]);
+        setSchemaSha(undefined);
       }
 
       if (dPath) {
@@ -128,14 +152,17 @@ export function RepoEditorPanel({
           largeWarning: data.largeWarning,
         };
         setDict(state);
-        setDictEntries(data.entries);
+        resetDictEntries(data.entries);
+      } else {
+        setDict(null);
+        resetDictEntries([]);
       }
     } catch (e) {
       setError({ message: e instanceof Error ? e.message : "加载失败" });
     } finally {
       setLoading(false);
     }
-  }, [owner, repo, branch]);
+  }, [owner, repo, branch, resetSchema, resetDictEntries]);
 
   useEffect(() => {
     load();
@@ -157,6 +184,9 @@ export function RepoEditorPanel({
   const dirty = schemaChanged || dictChanged;
   const readOnly = canWrite === false;
 
+  const canUndo = activeTab === "schema" ? canUndoSchema : canUndoDict;
+  const canRedo = activeTab === "schema" ? canRedoSchema : canRedoDict;
+
   const dictStats = useMemo(() => {
     if (!dict) return { added: 0, removed: 0, modified: 0 };
     const before = dict.entries;
@@ -176,6 +206,41 @@ export function RepoEditorPanel({
     }
     return { added, removed, modified };
   }, [dict, dictEntries]);
+
+  function handleUndo() {
+    if (readOnly) return;
+    if (activeTab === "schema") undoSchema();
+    else undoDict();
+  }
+
+  function handleRedo() {
+    if (readOnly) return;
+    if (activeTab === "schema") redoSchema();
+    else redoDict();
+  }
+
+  const undoRedoRef = useRef({ handleUndo, handleRedo, readOnly, showDiff });
+  undoRedoRef.current = { handleUndo, handleRedo, readOnly, showDiff };
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const ctx = undoRedoRef.current;
+      if (ctx.readOnly || ctx.showDiff) return;
+      if (!(e.ctrlKey || e.metaKey) || e.isComposing) return;
+      // Leave native undo to schema free-edit textarea (local draft until blur)
+      if ((e.target as HTMLElement | null)?.tagName === "TEXTAREA") return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        ctx.handleUndo();
+      } else if (key === "y" || (key === "z" && e.shiftKey)) {
+        e.preventDefault();
+        ctx.handleRedo();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function confirmSave() {
     if (!dirty || readOnly) return;
@@ -306,8 +371,8 @@ export function RepoEditorPanel({
   }
 
   return (
-    <div className="relative flex flex-col gap-5 pb-24 md:pb-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="relative flex flex-col gap-5 pb-36 md:pb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             {owner}/{repo}
@@ -317,17 +382,47 @@ export function RepoEditorPanel({
             {permission ? ` · 权限 ${permission}` : ""}
           </p>
         </div>
-        {!readOnly ? (
-          <button
-            type="button"
-            disabled={!dirty || saving}
-            onClick={() => setShowDiff(true)}
-            className="hidden items-center gap-1.5 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40 md:inline-flex"
-          >
-            <Save className="h-4 w-4" />
-            保存并提交
-          </button>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <DownloadButtons
+            schemaPath={schemaPath}
+            schemaRaw={schemaPath ? schemaCurrent : null}
+            dictPath={dict?.path ?? null}
+            dictRaw={dict ? dictCurrentRaw : null}
+          />
+          {!readOnly ? (
+            <>
+              <button
+                type="button"
+                disabled={!canUndo}
+                onClick={handleUndo}
+                className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                title="撤销（Ctrl/⌘+Z）"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                撤销
+              </button>
+              <button
+                type="button"
+                disabled={!canRedo}
+                onClick={handleRedo}
+                className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                title="重做（Ctrl/⌘+Y 或 Ctrl/⌘+Shift+Z）"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+                重做
+              </button>
+              <button
+                type="button"
+                disabled={!dirty || saving}
+                onClick={() => setShowDiff(true)}
+                className="hidden items-center gap-1.5 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40 md:inline-flex"
+              >
+                <Save className="h-4 w-4" />
+                保存并提交
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
 
       {readOnly ? <ReadOnlyBanner /> : null}
@@ -416,6 +511,26 @@ export function RepoEditorPanel({
       {/* Mobile fixed save bar above safe area */}
       {!readOnly ? (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-zinc-200 bg-white/95 px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 md:hidden">
+          <div className="mb-2 flex gap-2">
+            <button
+              type="button"
+              disabled={!canUndo}
+              onClick={handleUndo}
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-300 py-2.5 text-sm disabled:opacity-40 dark:border-zinc-600"
+            >
+              <Undo2 className="h-4 w-4" />
+              撤销
+            </button>
+            <button
+              type="button"
+              disabled={!canRedo}
+              onClick={handleRedo}
+              className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border border-zinc-300 py-2.5 text-sm disabled:opacity-40 dark:border-zinc-600"
+            >
+              <Redo2 className="h-4 w-4" />
+              重做
+            </button>
+          </div>
           <button
             type="button"
             disabled={!dirty || saving}
@@ -429,7 +544,7 @@ export function RepoEditorPanel({
       ) : null}
 
       {showDiff ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-auto rounded-xl bg-white p-4 shadow-xl dark:bg-zinc-900">
             <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
               提交前 Diff 预览

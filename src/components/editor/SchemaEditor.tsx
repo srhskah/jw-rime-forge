@@ -20,6 +20,7 @@ export function SchemaEditor({
 }) {
   const fields = useMemo(() => getRegisteredFields(), []);
   const [values, setValues] = useState<Record<string, SchemaEditValue | undefined>>({});
+  const [draft, setDraft] = useState(raw);
   const unrecognized = useMemo(() => listUnrecognizedTopLevelKeys(raw), [raw]);
 
   useEffect(() => {
@@ -29,6 +30,10 @@ export function SchemaEditor({
     }
     setValues(next);
   }, [raw, fields]);
+
+  useEffect(() => {
+    setDraft(raw);
+  }, [raw]);
 
   function update(path: string, value: SchemaEditValue) {
     const next = { ...values, [path]: value };
@@ -46,6 +51,11 @@ export function SchemaEditor({
     } catch (e) {
       console.error(e);
     }
+  }
+
+  function commitDraft() {
+    if (disabled || draft === raw) return;
+    onChange(draft, ["free-edit"]);
   }
 
   return (
@@ -66,17 +76,28 @@ export function SchemaEditor({
 
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
         <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-          原始 YAML 预览（只读）
+          自由编辑 YAML
         </h3>
         <p className="mt-1 text-xs text-zinc-500">
-          未在控件注册表中的字段不会自动生成表单。
+          可直接改全文；失焦或 Ctrl/⌘+Enter 写回。未在控件注册表中的字段不会自动生成表单。
           {unrecognized.length
-            ? ` 检测到未开放 GUI 的顶层键：${unrecognized.slice(0, 8).join(", ")}${unrecognized.length > 8 ? "…" : ""}。该字段暂未开放 GUI 编辑，请使用文本模式或提交 PR。`
-            : " 该字段暂未开放 GUI 编辑时，请使用文本模式或提交 PR。"}
+            ? ` 检测到未开放 GUI 的顶层键：${unrecognized.slice(0, 8).join(", ")}${unrecognized.length > 8 ? "…" : ""}。`
+            : ""}
         </p>
-        <pre className="mt-2 max-h-64 overflow-auto text-xs whitespace-pre-wrap font-mono text-zinc-700 dark:text-zinc-300">
-          {raw}
-        </pre>
+        <textarea
+          value={draft}
+          disabled={disabled}
+          spellCheck={false}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              commitDraft();
+            }
+          }}
+          className="mt-2 max-h-[28rem] min-h-[16rem] w-full resize-y rounded-md border border-zinc-300 bg-white p-3 font-mono text-xs leading-relaxed text-zinc-800 outline-none focus:ring-2 focus:ring-teal-600/30 disabled:opacity-60 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-200"
+        />
       </div>
     </div>
   );

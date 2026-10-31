@@ -1,6 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useMemo, useState, useEffect } from "react";
+import { parseDocument } from "yaml";
 import { getRegisteredFields } from "@/lib/widgets/registry";
 import {
   applySchemaEdits,
@@ -8,6 +10,19 @@ import {
   listUnrecognizedTopLevelKeys,
   type SchemaEditValue,
 } from "@/lib/rime/schema";
+
+const AlgebraEditorPanel = dynamic(
+  () =>
+    import("@/components/algebra-editor/AlgebraEditorPanel").then(
+      (m) => m.AlgebraEditorPanel
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="text-xs text-zinc-500">拼写运算面板加载中…</p>
+    ),
+  }
+);
 
 export function SchemaEditor({
   raw,
@@ -22,13 +37,30 @@ export function SchemaEditor({
   const [values, setValues] = useState<Record<string, SchemaEditValue | undefined>>({});
   const [draft, setDraft] = useState(raw);
   const unrecognized = useMemo(() => listUnrecognizedTopLevelKeys(raw), [raw]);
+  const hasAlgebra = useMemo(() => /(?:^|\n)\s*algebra\s*:/.test(raw), [raw]);
 
   useEffect(() => {
-    const next: Record<string, SchemaEditValue | undefined> = {};
-    for (const f of fields) {
-      next[f.path] = getSchemaValue(raw, f.path);
+    // Single parseDocument for all registered fields (avoid N× parse)
+    try {
+      const doc = parseDocument(raw, { keepSourceTokens: true });
+      const next: Record<string, SchemaEditValue | undefined> = {};
+      for (const f of fields) {
+        const segs = f.path.split("/").filter(Boolean);
+        const node = doc.getIn(segs, true);
+        if (node === undefined || node === null) {
+          next[f.path] = undefined;
+        } else if (typeof node === "object" && node !== null && "toJSON" in node) {
+          next[f.path] = (node as { toJSON: () => unknown }).toJSON() as SchemaEditValue;
+        } else {
+          next[f.path] = node as SchemaEditValue;
+        }
+      }
+      setValues(next);
+    } catch {
+      const next: Record<string, SchemaEditValue | undefined> = {};
+      for (const f of fields) next[f.path] = getSchemaValue(raw, f.path);
+      setValues(next);
     }
-    setValues(next);
   }, [raw, fields]);
 
   useEffect(() => {
@@ -45,7 +77,7 @@ export function SchemaEditor({
     try {
       const serialized = applySchemaEdits(raw, edits);
       const hints = Object.keys(edits)
-        .filter((k) => getSchemaValue(raw, k) !== edits[k])
+        .filter((k) => next[k] !== undefined)
         .map((k) => k.split("/").pop() || k);
       onChange(serialized, hints);
     } catch (e) {
@@ -73,6 +105,10 @@ export function SchemaEditor({
           />
         ))}
       </div>
+
+      {hasAlgebra ? (
+        <AlgebraEditorPanel raw={raw} disabled={disabled} onChange={onChange} />
+      ) : null}
 
       <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
         <h3 className="text-sm font-medium text-zinc-800 dark:text-zinc-200">

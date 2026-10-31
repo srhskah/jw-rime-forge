@@ -73,15 +73,26 @@ export function RepoEditorPanel({
   const [schemaId, setSchemaId] = useState("my_schema");
   const [schemaName, setSchemaName] = useState("我的方案");
   const [activeTab, setActiveTab] = useState<"dict" | "schema">("dict");
+  const [dictDirty, setDictDirty] = useState(false);
+  const [dictCurrentRaw, setDictCurrentRaw] = useState("");
+  const dictTypingBurst = useRef(false);
+  const dictTypingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setSaveMsg(null);
+    setDictDirty(false);
+    setDictCurrentRaw("");
     try {
-      const permRes = await fetch(
-        `/api/github/permission?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`
-      );
+      const [permRes, filesRes] = await Promise.all([
+        fetch(
+          `/api/github/permission?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}`
+        ),
+        fetch(
+          `/api/github/repo/${owner}/${repo}/files?branch=${encodeURIComponent(branch)}`
+        ),
+      ]);
       const permData = await permRes.json();
       if (permRes.ok) {
         setCanWrite(Boolean(permData.canWrite));
@@ -90,9 +101,6 @@ export function RepoEditorPanel({
         setCanWrite(false);
       }
 
-      const filesRes = await fetch(
-        `/api/github/repo/${owner}/${repo}/files?branch=${encodeURIComponent(branch)}`
-      );
       const filesData = await filesRes.json();
       if (!filesRes.ok) {
         if (filesRes.status === 409 || String(filesData.error || "").includes("empty")) {
@@ -119,16 +127,22 @@ export function RepoEditorPanel({
       const dPath = discovered.find((f) => f.type === "dict")?.path ?? null;
       setSchemaPath(sPath);
 
+      const contentFetches: Promise<void>[] = [];
+
       if (sPath) {
-        const res = await fetch(
-          `/api/github/repo/${owner}/${repo}/content?path=${encodeURIComponent(sPath)}&ref=${encodeURIComponent(branch)}`
+        contentFetches.push(
+          (async () => {
+            const res = await fetch(
+              `/api/github/repo/${owner}/${repo}/content?path=${encodeURIComponent(sPath)}&ref=${encodeURIComponent(branch)}`
+            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "读取 schema 失败");
+            setSchemaOriginal(data.raw);
+            resetSchema(data.raw);
+            setSchemaHints([]);
+            setSchemaSha(data.sha);
+          })()
         );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "读取 schema 失败");
-        setSchemaOriginal(data.raw);
-        resetSchema(data.raw);
-        setSchemaHints([]);
-        setSchemaSha(data.sha);
       } else {
         setSchemaOriginal("");
         resetSchema("");
@@ -137,26 +151,36 @@ export function RepoEditorPanel({
       }
 
       if (dPath) {
-        const res = await fetch(
-          `/api/github/repo/${owner}/${repo}/content?path=${encodeURIComponent(dPath)}&ref=${encodeURIComponent(branch)}&parse=dict`
+        contentFetches.push(
+          (async () => {
+            const res = await fetch(
+              `/api/github/repo/${owner}/${repo}/content?path=${encodeURIComponent(dPath)}&ref=${encodeURIComponent(branch)}&parse=dict`
+            );
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "读取 dict 失败");
+            const state: DictState = {
+              path: dPath,
+              sha: data.sha,
+              raw: data.raw,
+              headerRaw: data.headerRaw,
+              entries: data.entries,
+              columns: data.columns,
+              largeWarning: data.largeWarning,
+            };
+            setDict(state);
+            resetDictEntries(data.entries);
+            setDictCurrentRaw(data.raw);
+            setDictDirty(false);
+          })()
         );
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "读取 dict 失败");
-        const state: DictState = {
-          path: dPath,
-          sha: data.sha,
-          raw: data.raw,
-          headerRaw: data.headerRaw,
-          entries: data.entries,
-          columns: data.columns,
-          largeWarning: data.largeWarning,
-        };
-        setDict(state);
-        resetDictEntries(data.entries);
       } else {
         setDict(null);
         resetDictEntries([]);
+        setDictCurrentRaw("");
+        setDictDirty(false);
       }
+
+      await Promise.all(contentFetches);
     } catch (e) {
       setError({ message: e instanceof Error ? e.message : "加载失败" });
     } finally {
@@ -174,13 +198,31 @@ export function RepoEditorPanel({
     else if (schemaPath) setActiveTab("schema");
   }, [dict, schemaPath]);
 
-  const dictCurrentRaw = useMemo(() => {
-    if (!dict) return "";
-    return rebuildDictYaml(dict.headerRaw, dictEntries, dict.columns);
-  }, [dict, dictEntries]);
+  /** Rebuild YAML only when needed (diff / download / save) — not on every keystroke. */
+  const ensureDictRaw = useCallback(
+    (entries: DictEntry[] = dictEntries) => {
+      if (!dict) return "";
+      const raw = rebuildDictYaml(dict.headerRaw, entries, dict.columns);
+      setDictCurrentRaw(raw);
+      return raw;
+    },
+    [dict, dictEntries]
+  );
+
+  function onDictEntriesChange(next: DictEntry[]) {
+    setDictDirty(true);
+    // Coalesce undo history while typing so we don't clone 万条数组上百次
+    const record = !dictTypingBurst.current;
+    dictTypingBurst.current = true;
+    setDictEntries(next, record);
+    if (dictTypingTimer.current) clearTimeout(dictTypingTimer.current);
+    dictTypingTimer.current = setTimeout(() => {
+      dictTypingBurst.current = false;
+    }, 450);
+  }
 
   const schemaChanged = schemaCurrent !== schemaOriginal;
-  const dictChanged = dict ? dictCurrentRaw !== dict.raw : false;
+  const dictChanged = Boolean(dict) && dictDirty;
   const dirty = schemaChanged || dictChanged;
   const readOnly = canWrite === false;
 
@@ -193,6 +235,10 @@ export function RepoEditorPanel({
     const after = dictEntries;
     const removed = Math.max(0, before.length - after.length);
     const added = Math.max(0, after.length - before.length);
+    // Skip O(n) field scan on large dicts — commit message still gets add/remove
+    if (before.length > 3000 || after.length > 3000) {
+      return { added, removed, modified: 0 };
+    }
     let modified = 0;
     const n = Math.min(before.length, after.length);
     for (let i = 0; i < n; i++) {
@@ -210,13 +256,24 @@ export function RepoEditorPanel({
   function handleUndo() {
     if (readOnly) return;
     if (activeTab === "schema") undoSchema();
-    else undoDict();
+    else {
+      undoDict();
+      setDictDirty(true);
+    }
   }
 
   function handleRedo() {
     if (readOnly) return;
     if (activeTab === "schema") redoSchema();
-    else redoDict();
+    else {
+      redoDict();
+      setDictDirty(true);
+    }
+  }
+
+  function openDiff() {
+    if (dictChanged && dict) ensureDictRaw();
+    setShowDiff(true);
   }
 
   const undoRedoRef = useRef({ handleUndo, handleRedo, readOnly, showDiff });
@@ -256,9 +313,10 @@ export function RepoEditorPanel({
         });
       }
       if (dictChanged && dict) {
+        const raw = ensureDictRaw();
         changes.push({
           path: dict.path,
-          content: dictCurrentRaw,
+          content: raw,
           baseSha: dict.sha,
         });
       }
@@ -388,6 +446,11 @@ export function RepoEditorPanel({
             schemaRaw={schemaPath ? schemaCurrent : null}
             dictPath={dict?.path ?? null}
             dictRaw={dict ? dictCurrentRaw : null}
+            getDictRaw={
+              dict
+                ? () => ensureDictRaw()
+                : undefined
+            }
           />
           {!readOnly ? (
             <>
@@ -414,7 +477,7 @@ export function RepoEditorPanel({
               <button
                 type="button"
                 disabled={!dirty || saving}
-                onClick={() => setShowDiff(true)}
+                onClick={openDiff}
                 className="hidden items-center gap-1.5 rounded-md bg-teal-600 px-3 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-40 md:inline-flex"
               >
                 <Save className="h-4 w-4" />
@@ -487,7 +550,7 @@ export function RepoEditorPanel({
                 columns={dict.columns}
                 disabled={readOnly}
                 largeWarning={dict.largeWarning}
-                onChange={setDictEntries}
+                onChange={onDictEntriesChange}
               />
             </section>
           ) : null}
@@ -534,7 +597,7 @@ export function RepoEditorPanel({
           <button
             type="button"
             disabled={!dirty || saving}
-            onClick={() => setShowDiff(true)}
+            onClick={openDiff}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-teal-600 py-3 text-sm font-medium text-white disabled:opacity-40"
           >
             <Save className="h-4 w-4" />

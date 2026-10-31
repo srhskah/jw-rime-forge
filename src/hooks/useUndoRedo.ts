@@ -32,12 +32,14 @@ export function useUndoRedo<T>(initial: T, capacity = DEFAULT_CAPACITY) {
   const set = useCallback(
     (value: T, record = true) => {
       if (record) {
-        pastRef.current = [...pastRef.current, presentRef.current].slice(-capacity);
+        pastRef.current = [...pastRef.current, presentRef.current].slice(
+          -capacity
+        );
         futureRef.current = [];
+        bump();
       }
       presentRef.current = value;
       setPresent(value);
-      if (record) bump();
     },
     [bump, capacity]
   );

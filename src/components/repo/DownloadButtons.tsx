@@ -18,14 +18,18 @@ export function DownloadButtons({
   schemaRaw,
   dictPath,
   dictRaw,
+  getDictRaw,
 }: {
   schemaPath: string | null;
   schemaRaw: string | null;
   dictPath: string | null;
   dictRaw: string | null;
+  /** Lazy dict content (avoid rebuilding YAML until click). */
+  getDictRaw?: () => string | null;
 }) {
   const schemaName = schemaPath?.split("/").pop() || "schema.yaml";
   const dictName = dictPath?.split("/").pop() || "dict.yaml";
+  const canDict = Boolean(getDictRaw || dictRaw);
 
   return (
     <div className="flex flex-wrap gap-2">
@@ -40,8 +44,11 @@ export function DownloadButtons({
       </button>
       <button
         type="button"
-        disabled={!dictRaw}
-        onClick={() => dictRaw && downloadRaw(dictName, dictRaw)}
+        disabled={!canDict}
+        onClick={() => {
+          const content = getDictRaw?.() ?? dictRaw;
+          if (content) downloadRaw(dictName, content);
+        }}
         className="inline-flex items-center gap-1.5 rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
       >
         <Download className="h-3.5 w-3.5" />

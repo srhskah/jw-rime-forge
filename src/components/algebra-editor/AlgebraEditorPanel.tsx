@@ -10,6 +10,7 @@ import {
   type AlgebraTemplate,
 } from "@/lib/algebra";
 import { AddRuleForm } from "./AddRuleForm";
+import { ChainPreview } from "./ChainPreview";
 import { RuleEditor } from "./RuleEditor";
 import { RuleList } from "./RuleList";
 
@@ -209,6 +210,9 @@ export function AlgebraEditorPanel({
           />
         </div>
       </div>
+
+      {/* Chain preview is read-only computation — available even without write permission */}
+      <ChainPreview rules={rules} />
     </div>
   );
 }

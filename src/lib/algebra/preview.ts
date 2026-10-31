@@ -9,7 +9,7 @@ export type AlgebraPreviewResult = {
 
 /**
  * Approximate Boost.Regex-style replacement: $n, \L$n, \U$n.
- * Not a full librime / Boost port — for single-rule debug only.
+ * Applied via String.replace so unmatched parts of the input are preserved.
  */
 function applyReplacement(template: string, match: RegExpExecArray): string {
   return template
@@ -24,12 +24,36 @@ function applyReplacement(template: string, match: RegExpExecArray): string {
 
 function tryRegExp(pattern: string): RegExp | { error: string } {
   try {
+    // Non-global: one substitution per spelling, like typical Rime algebra steps
     return new RegExp(pattern);
   } catch (e) {
     return {
       error: `正则可能无效：${e instanceof Error ? e.message : String(e)}`,
     };
   }
+}
+
+/**
+ * Replace on the full input string (preserves non-matching suffix/prefix).
+ * e.g. derive/([bpmf])o/$1uo/ on "bo2" → "buo2"
+ */
+export function applyPatternReplace(
+  input: string,
+  pattern: string,
+  replacement: string
+): { ok: true; result: string; matched: boolean } | { ok: false; error: string } {
+  const re = tryRegExp(pattern);
+  if ("error" in re) return { ok: false, error: re.error };
+
+  const m = re.exec(input);
+  if (!m || m.index === undefined) {
+    return { ok: true, result: input, matched: false };
+  }
+
+  const mid = applyReplacement(replacement, m);
+  const result =
+    input.slice(0, m.index) + mid + input.slice(m.index + m[0].length);
+  return { ok: true, result, matched: true };
 }
 
 function previewParsed(
@@ -60,29 +84,21 @@ function previewParsed(
     return { outputs: [input] };
   }
 
-  const re = tryRegExp(args[0]);
-  if ("error" in re) {
-    return {
-      outputs: operator === "xform" ? [input] : [input],
-      warning: re.error,
-    };
+  const replaced = applyPatternReplace(input, args[0] ?? "", args[1] ?? "");
+  if (!replaced.ok) {
+    return { outputs: [input], warning: replaced.error };
   }
-
-  const m = re.exec(input);
-  if (!m) {
-    return { outputs: [input] };
-  }
-
-  const replaced = applyReplacement(args[1] ?? "", m);
 
   if (operator === "xform") {
-    return { outputs: [replaced] };
+    return { outputs: [replaced.result] };
   }
 
-  // derive / fuzz / abbrev — keep prototype + derived
+  // derive / fuzz / abbrev — keep prototype + derived (full-string replace)
   if (operator === "derive" || operator === "fuzz" || operator === "abbrev") {
-    if (replaced === input) return { outputs: [input] };
-    return { outputs: [input, replaced] };
+    if (!replaced.matched || replaced.result === input) {
+      return { outputs: [input] };
+    }
+    return { outputs: [input, replaced.result] };
   }
 
   return { outputs: [input], error: "unknown operator" };
@@ -94,5 +110,13 @@ export function previewAlgebraRule(
   input: string
 ): AlgebraPreviewResult {
   const parsed = parseAlgebraRule(rawRule);
+  return previewParsed(parsed, input);
+}
+
+/** Apply one parsed rule to a single spelling (shared by chain engine). */
+export function applyParsedRuleToSpelling(
+  parsed: ParsedAlgebraRule,
+  input: string
+): AlgebraPreviewResult {
   return previewParsed(parsed, input);
 }

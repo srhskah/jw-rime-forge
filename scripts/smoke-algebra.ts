@@ -3,9 +3,11 @@ import {
   ALGEBRA_TEMPLATES,
   applyAlgebraRules,
   formatAlgebraRule,
+  groupChainSpells,
   parseAlgebraRule,
   previewAlgebraRule,
   readAlgebra,
+  runAlgebraChain,
   softRegexWarning,
   templateToRule,
 } from "../src/lib/algebra";
@@ -48,6 +50,25 @@ assert(
   previewAlgebraRule("erase/^foo$/", "foo").outputs.length === 0,
   "erase preview"
 );
+
+// Bugfix: preserve unmatched suffix (tone digit)
+const bo2 = previewAlgebraRule("derive/([bpmf])o/$1uo/", "bo2");
+assert(
+  bo2.outputs.length === 2 &&
+    bo2.outputs[0] === "bo2" &&
+    bo2.outputs[1] === "buo2",
+  `derive bo2 → buo2 got ${JSON.stringify(bo2.outputs)}`
+);
+
+// Chain: derive then abbrev
+const chain = runAlgebraChain(
+  ["derive/([bpmf])o/$1uo/", "abbrev/^([a-z]).+$/$1/"],
+  ["bo2"]
+);
+const g = groupChainSpells(chain.spells);
+assert(g.origin.includes("bo2"), "chain origin bo2");
+assert(g.derived.includes("buo2"), "chain derived buo2");
+assert(g.derived.includes("b"), "chain abbrev b");
 
 const schema = `# keep comment
 schema:

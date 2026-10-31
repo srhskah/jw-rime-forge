@@ -18,7 +18,8 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const origin = process.env.NEXT_PUBLIC_APP_URL || `${url.protocol}//${url.host}`;
+  // const origin = process.env.NEXT_PUBLIC_APP_URL || `${url.protocol}//${url.host}`;
+  const origin = process.env.APP_URL || process.env.URL || `${url.protocol}//${url.host}`;
   const redirectUri = `${origin}/api/auth/callback`;
   const state = crypto.randomUUID();
 

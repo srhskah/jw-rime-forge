@@ -227,7 +227,7 @@ export function SchemaBrowser({
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="像查字典一样搜索词条…"
+                placeholder="搜索 text / code…"
                 className="w-full rounded-md border border-zinc-300 bg-white py-2 pr-3 pl-9 text-sm outline-none ring-teal-600/30 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900"
               />
             </label>

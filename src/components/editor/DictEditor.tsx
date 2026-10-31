@@ -300,7 +300,7 @@ export function DictEditor({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="搜索词条…"
+              placeholder="搜索 text / code…"
               className="w-full rounded-md border border-zinc-300 bg-white py-1.5 pr-2.5 pl-8 text-xs outline-none ring-teal-600/30 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900"
             />
           </label>

@@ -156,13 +156,18 @@ export function parseDict(raw: string): ParsedDict {
   };
 }
 
-/** Indices of entries whose text matches query (case-insensitive substring). */
+/** Indices of entries whose text or code matches query (case-insensitive substring). */
 export function filterEntryIndices(entries: DictEntry[], query: string): number[] {
   const q = query.trim().toLowerCase();
   if (!q) return entries.map((_, i) => i);
   const out: number[] = [];
   for (let i = 0; i < entries.length; i++) {
-    if (entries[i].text.toLowerCase().includes(q)) out.push(i);
+    const e = entries[i];
+    if (e.text.toLowerCase().includes(q)) {
+      out.push(i);
+      continue;
+    }
+    if ((e.code ?? "").toLowerCase().includes(q)) out.push(i);
   }
   return out;
 }
